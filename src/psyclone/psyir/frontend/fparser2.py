@@ -4978,7 +4978,8 @@ class Fparser2Reader():
             if type(routine_symbol) is Symbol:
                 # Specialise routine_symbol from a Symbol to a
                 # RoutineSymbol
-                routine_symbol.specialise(RoutineSymbol)
+                if isinstance(parent, Schedule):
+                    routine_symbol.specialise(RoutineSymbol)
             elif isinstance(routine_symbol, RoutineSymbol):
                 # This symbol is already the expected type
                 pass

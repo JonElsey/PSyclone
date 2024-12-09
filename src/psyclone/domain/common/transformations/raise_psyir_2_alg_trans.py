@@ -248,6 +248,11 @@ class RaisePSyIR2AlgTrans(Transformation):
                 args = call_arg.pop_all_children()
                 type_symbol = call_arg.symbol
                 arg_info.append((type_symbol, args))
+            elif isinstance(call_arg, Call):
+                # kernel misrepresented as Call
+                type_symbol = call_arg.routine.symbol
+                args = [x.detach() for x in call_arg.arguments]
+                arg_info.append((type_symbol, args))
             else:
                 # The validates check that this can only be a Codeblock with
                 # a StructureConstructor fparser2 node inside

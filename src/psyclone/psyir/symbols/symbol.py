@@ -177,7 +177,6 @@ class Symbol():
         :raises TypeError: if subclass is not a sub-class of Symbol.
 
         '''
-        import pdb; pdb.set_trace()
         try:
             is_subclass = issubclass(subclass, self.__class__)
         except TypeError as info:
