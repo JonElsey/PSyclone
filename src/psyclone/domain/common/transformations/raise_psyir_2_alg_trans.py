@@ -209,20 +209,16 @@ class RaisePSyIR2AlgTrans(Transformation):
                 # pylint: disable=protected-access
                 for fp2_node in arg._fp2_nodes:
                     self._validate_fp2_node(fp2_node)
+            elif isinstance(arg, Call):
+                pass
             else:
-                if isinstance(arg, Call):
-                    info = (
-                        f"The invoke call argument '{arg.routine.name}' has "
-                        f"been used as a routine name. This is not allowed.")
-                else:
-                    info = (
-                        f"The arguments to this invoke call are expected to "
-                        f"be kernel calls which are represented in generic "
-                        f"PSyIR as CodeBlocks or ArrayReferences, but "
-                        f"'{arg.debug_string()}' is of type "
-                        f"'{type(arg).__name__}'.")
                 raise TransformationError(
-                    f"Error in {self.name} transformation. {info}")
+                    f"Error in {self.name} transformation. "
+                    f"The arguments to this invoke call are expected to "
+                    f"be kernel calls which are represented in generic "
+                    f"PSyIR as CodeBlocks or ArrayReferences, but "
+                    f"'{arg.debug_string()}' is of type "
+                    f"'{type(arg).__name__}'.")
 
     def apply(self, call, index, options=None):
         ''' Apply the transformation to the supplied node.

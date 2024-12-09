@@ -50,7 +50,8 @@ from fparser.two.Fortran2003 import Main_Program, Module, \
     Add_Operand, Parenthesis, Structure_Constructor, Component_Spec_List, \
     Proc_Component_Ref, Kind_Selector, Type_Declaration_Stmt, \
     Declaration_Type_Spec, Entity_Decl, Intrinsic_Type_Spec, \
-    Data_Component_Def_Stmt, Component_Decl
+    Data_Component_Def_Stmt, Component_Decl, Function_Reference, \
+    Actual_Arg_Spec_List
 # pylint: enable=no-name-in-module
 
 from psyclone.configuration import Config, LFRIC_API_NAMES
@@ -342,11 +343,11 @@ class Parser():
                 invoke_label = self.check_invoke_label(argument)
 
             elif isinstance(
-                    argument, (Data_Ref, Part_Ref, Structure_Constructor)):
+                    argument, (Data_Ref, Part_Ref, Structure_Constructor,
+                               Function_Reference)):
                 # This should be a kernel call.
                 kernel_call = self.create_kernel_call(argument)
                 kernel_calls.append(kernel_call)
-
             else:
                 # Unknown and/or unsupported argument type
                 raise ParseError(
@@ -644,7 +645,13 @@ def get_kernel(parse_tree, alg_filename, arg_type_defns):
 
     '''
     # pylint: disable=too-many-branches
-    if not isinstance(parse_tree, (Part_Ref, Structure_Constructor)):
+    # fparser can not distinguish between:
+    # - Array accessor (Part_Ref with Section_Subscript_List) 
+    # - Type constructor (Structure_Constructor with Component_Spec_List)
+    # - Function Call (Function_Reference with Actual_Arg_Spec_List)
+    # so we accept the three combinations below
+    if not isinstance(parse_tree, (Part_Ref, Structure_Constructor,
+                                   Function_Reference)):
         raise InternalError(
             f"algorithm.py:get_kernel: Expected a parse tree (type Part_Ref "
             f"or Structure_Constructor) but found instance of "
@@ -661,7 +668,8 @@ def get_kernel(parse_tree, alg_filename, arg_type_defns):
     # Extract argument list. This can be removed when fparser#211 is fixed.
     argument_list = []
     if isinstance(parse_tree.items[1],
-                  (Section_Subscript_List, Component_Spec_List)):
+                  (Section_Subscript_List, Component_Spec_List,
+                   Actual_Arg_Spec_List)):
         argument_list = parse_tree.items[1].items
     else:
         # Expecting a single entry rather than a list
