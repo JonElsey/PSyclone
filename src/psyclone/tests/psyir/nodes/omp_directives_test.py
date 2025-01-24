@@ -1037,9 +1037,7 @@ def testinfer_sharing_attributes_sequential_semantics(fortran_reader):
     parallelise (but we force the transformation anyway). For now this
     may return different results than the original code.
 
-    #TODO #598: This could be a lastprivate?
     '''
-
     # In this example the result will take the value of the last i in
     # sequential order, but an arbitrary i in parallel.
     psyir = fortran_reader.psyir_from_source('''
@@ -1064,8 +1062,6 @@ def test_directive_lastprivate(fortran_reader, fortran_writer):
     ''' Test to demonstrate remaining issues with the OpenMP data sharing
     clauses when we have dependencies after the OpenMP loop.
 
-    #TODO #598: A better use of dependency analysis could fix these issues.
-
     '''
     psyir = fortran_reader.psyir_from_source('''
         subroutine my_subroutine()
@@ -1089,9 +1085,7 @@ def test_directive_lastprivate(fortran_reader, fortran_writer):
   enddo
   !$omp end parallel do
   scalar1 = scalar2'''
-    if code not in expected:
-        pytest.xfail("#598 We do not check yet for possible dependencies of"
-                     "variables marked as private after the OpenMP region")
+    assert expected in code
 
 
 def test_omp_parallel_private_clause():

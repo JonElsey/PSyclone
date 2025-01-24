@@ -42,10 +42,10 @@ import abc
 from collections.abc import Iterable
 
 from psyclone import psyGen
-from psyclone.core import Signature
+from psyclone.core import Signature, VariablesAccessInfo
 from psyclone.domain.common.psylayer import PSyLoop
 from psyclone.psyir import nodes
-from psyclone.psyir.nodes import Loop, Reference, Call, Routine
+from psyclone.psyir.nodes import Loop, Reference, Call, Routine, ArrayReference
 from psyclone.psyir.symbols import AutomaticInterface
 from psyclone.psyir.tools import DependencyTools, DTCode
 from psyclone.psyir.transformations.loop_trans import LoopTrans
@@ -81,7 +81,7 @@ class ParallelLoopTrans(LoopTrans, metaclass=abc.ABCMeta):
         '''
 
     @staticmethod
-    def _attempt_privatisation(node, symbol_name, dry_run=False):
+    def _attempt_privatisation(loop, symbol_name, dry_run=False):
         ''' Check and (if dry_run is False) perform symbol privatisation
         for the given symbol_name in the given node.
 
@@ -94,7 +94,7 @@ class ParallelLoopTrans(LoopTrans, metaclass=abc.ABCMeta):
         :rtype: bool
         '''
         try:
-            sym = node.scope.symbol_table.lookup(symbol_name)
+            sym = loop.scope.symbol_table.lookup(symbol_name)
         except KeyError:
             # Structures are reported with the full expression:
             # "mystruct%myfield" by the DA var_name, we purposely avoid
@@ -105,16 +105,24 @@ class ParallelLoopTrans(LoopTrans, metaclass=abc.ABCMeta):
         if not isinstance(sym.interface, AutomaticInterface):
             return False
 
-        # Check that the symbol is not referenced after this loop (before
+
+        # Check that the symbol value is unused after this loop (before
         # the loop is fine because we can use OpenMP/OpenACC first-private or
         # Fortran do concurrent local_init())
-        if any(ref.symbol is sym
-               for ref in node.following(include_children=False)
-               if isinstance(ref, Reference)):
-            return False
+        accesses = VariablesAccessInfo(nodes=loop.loop_body)
+        loop_last_access = accesses[Signature(symbol_name)].all_accesses[-1]
+        if not isinstance(loop_last_access.node, ArrayReference):
+            return False  # Just consider plain arrays for now
+        accesses_after_the_loop = loop_last_access.node.next_accesses()
+        for next_access in accesses_after_the_loop:
+            if next_access.is_descendent_of(loop):
+                # The control-flow may loop back into the loop, but this is ok
+                continue
+            if not next_access.is_write:
+                return False
 
         if not dry_run:
-            node.explicitly_private_symbols.add(sym)
+            loop.explicitly_private_symbols.add(sym)
 
         return True
 
