@@ -160,7 +160,7 @@ def trans(psyir):
                 convert_array_notation=True,
                 loopify_array_intrinsics=True,
                 convert_range_loops=(psyir.name not in ["fldread.f90"]),
-                increase_array_ranks=False,
+                increase_array_ranks=True,
                 hoist_expressions=True,
         )
 
