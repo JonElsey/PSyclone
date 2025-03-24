@@ -75,6 +75,7 @@ SKIP_FOR_PERFORMANCE = [
     "iom_nf90.f90",
     "iom_def.f90",
     "timing.f90",
+    "prtctl.f90"
 ]
 
 OFFLOADING_ISSUES = [
