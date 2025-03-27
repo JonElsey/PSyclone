@@ -43,7 +43,7 @@ from psyclone.psyir.transformations.region_trans import RegionTrans
 from psyclone.psyir.frontend.fortran import FortranReader
 from psyclone.psyir.symbols import DataSymbol, INTEGER_TYPE, \
         PreprocessorInterface
-
+from psyclone.psyir.symbols.datatypes import UnsupportedFortranType
 
 class DebugChecksumTrans(RegionTrans):
     '''
@@ -118,7 +118,20 @@ class DebugChecksumTrans(RegionTrans):
         checksum_nodes = []
         freader = FortranReader()
         for sym in writes:
+            # Skip checksums for character arrays
+            if isinstance(sym.datatype, UnsupportedFortranType):
+              print(f'Skipping {sym.name} as it is an unsupported datatype')
+              continue
+            # And additionally for arrays of BOOLEAN type
+            #breakpoint()
+            # this assumes that it is an array, but I think it should be fine
+            # as there is the .is_array() conditional above
+            if 'BOOLEAN' in sym.datatype.datatype.intrinsic.name:
+              print(f'Skipping {sym.name} as it is of BOOLEAN type')
             sym_name = sym.name
+            print(sym_name)
+            print(sym.datatype)
+            #breakpoint()
             checksum = freader.psyir_from_statement(
                     f'print *, "{sym_name} checksum", SUM({sym_name})',
                     node_list[0].ancestor(Routine).symbol_table)
