@@ -31,7 +31,8 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 # -----------------------------------------------------------------------------
-# Author  A. B. G. Chalk, STFC Daresbury Lab
+# Authors  A. B. G. Chalk, STFC Daresbury Lab
+#          J. Elsey, CEMAC, University of Leeds
 
 '''This module contains the DebugChecksumTrans class.'''
 
@@ -43,8 +44,12 @@ from psyclone.psyir.transformations.region_trans import RegionTrans
 from psyclone.psyir.frontend.fortran import FortranReader
 from psyclone.psyir.symbols import DataSymbol, INTEGER_TYPE, \
         PreprocessorInterface
-from psyclone.psyir.symbols.datatypes import UnsupportedFortranType
+from psyclone.psyir.symbols.datatypes import UnsupportedFortranType, UnresolvedType
 
+
+
+        
+        
 class DebugChecksumTrans(RegionTrans):
     '''
     Creates a set of checksums (written via print) for all written to arrays
@@ -92,7 +97,8 @@ class DebugChecksumTrans(RegionTrans):
 
     '''
 
-    def apply(self, node: Union[Node, List[Node]], options=None) -> None:
+    def apply(self, node: Union[Node, List[Node]], options=None, 
+              ukca=False) -> None:
         '''
             Applies the checksum transformation to the provided node(s).
 
@@ -100,42 +106,77 @@ class DebugChecksumTrans(RegionTrans):
                           transformation to.
             :param options: a dictionary with options for transformations.
             :type options: Optional[Dict[str, Any]]
+            :param ukca: Boolean switch to determine whether to use PRINT (default)
+                         or a combination of WRITE and call umPrint (UKCA/UM)
 
         '''
         self.validate(node)
-
         node_list = self.get_node_list(node)
 
         # Find all the writes.
         vai = VariablesAccessInfo(node_list)
-
         writes = []
         for sig in vai.all_data_accesses:
             if vai.is_written(sig) and vai[sig].is_array():
-                sym = vai[sig].all_accesses[0].node.symbol
-                writes.append(sym)
+              try:
+                  sym = vai[sig].all_accesses[0].node.symbol
+                  writes.append(sym)
+              except Exception as e:
+                  print(Exception)
+                  continue
         # For each write, add a checksum after.
         checksum_nodes = []
         freader = FortranReader()
         for sym in writes:
             # Skip checksums for character arrays
-            if isinstance(sym.datatype, UnsupportedFortranType):
-              print(f'Skipping {sym.name} as it is an unsupported datatype')
-              continue
+            if not hasattr(sym, 'datatype'):
+                print(f'symbol {sym} has no datatype, continuing...')
+                continue
+            if isinstance(sym.datatype, UnresolvedType):
+                print(f'Symbol {sym} is an UnresolvedType, skipping')
+            try:
+                if isinstance(sym.datatype, UnsupportedFortranType):
+                    print(f'Skipping {sym.name} as it is an unsupported datatype')
+                    continue
+            except AttributeError:
+                print(f'Cannot access datatype attribute of {sym} - continuing')
+                continue
+            
             # And additionally for arrays of BOOLEAN type
             #breakpoint()
             # this assumes that it is an array, but I think it should be fine
             # as there is the .is_array() conditional above
-            if 'BOOLEAN' in sym.datatype.datatype.intrinsic.name:
-              print(f'Skipping {sym.name} as it is of BOOLEAN type')
+            if sym.datatype.datatype == None:
+                continue
+            try:
+              if 'BOOLEAN' in sym.datatype.datatype.intrinsic.name:
+                print(f'Skipping {sym.name} as it is of BOOLEAN type')
+                continue
+            except:  # not a suitable datatype for a SUM either if this fails
+              continue
             sym_name = sym.name
             print(sym_name)
             print(sym.datatype)
             #breakpoint()
-            checksum = freader.psyir_from_statement(
-                    f'print *, "{sym_name} checksum", SUM({sym_name})',
+          
+            srcname = node_list[0].ancestor(Routine).name
+
+
+            if ukca:
+                checksum = freader.psyir_from_statement(
+                    f"write (umMessage, 'A40') '{sym_name} checksum', SUM({sym_name})",
                     node_list[0].ancestor(Routine).symbol_table)
-            # Remove the comment about this being a code block.
+                checksum_call = freader.psyir_from_statement(
+                  f"call umprint(umMessage, src='{srcname}')"
+                )
+                # Remove the comment about this being a code block.
+                checksum_call.preceding_comment = ""
+                checksum_nodes.append(checksum_call)
+            else:
+                checksum = freader.psyir_from_statement(
+                        f"print *, '{sym_name} checksum', SUM({sym_name})",
+                        node_list[0].ancestor(Routine).symbol_table)
+              
             checksum.preceding_comment = ""
             checksum_nodes.append(checksum)
 
