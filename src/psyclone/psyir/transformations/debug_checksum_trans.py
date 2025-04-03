@@ -43,8 +43,9 @@ from psyclone.psyir.nodes import Assignment, Node, Reference, Routine
 from psyclone.psyir.transformations.region_trans import RegionTrans
 from psyclone.psyir.frontend.fortran import FortranReader
 from psyclone.psyir.symbols import DataSymbol, INTEGER_TYPE, \
-        PreprocessorInterface
+        PreprocessorInterface, ContainerSymbol
 from psyclone.psyir.symbols.datatypes import UnsupportedFortranType, UnresolvedType
+from psyclone.psyir.symbols.interfaces import ImportInterface
 
 
 
@@ -143,7 +144,6 @@ class DebugChecksumTrans(RegionTrans):
                 continue
             
             # And additionally for arrays of BOOLEAN type
-            #breakpoint()
             # this assumes that it is an array, but I think it should be fine
             # as there is the .is_array() conditional above
             if sym.datatype.datatype == None:
@@ -159,10 +159,12 @@ class DebugChecksumTrans(RegionTrans):
             print(sym.datatype)
             #breakpoint()
           
-            srcname = node_list[0].ancestor(Routine).name
+            routine = node_list[0].ancestor(Routine)
+            srcname = routine.name
 
 
             if ukca:
+                self.check_for_umprintmgr(routine)
                 checksum = freader.psyir_from_statement(
                     f"write (umMessage, 'A40') '{sym_name} checksum', SUM({sym_name})",
                     node_list[0].ancestor(Routine).symbol_table)
@@ -175,7 +177,7 @@ class DebugChecksumTrans(RegionTrans):
             else:
                 checksum = freader.psyir_from_statement(
                         f"print *, '{sym_name} checksum', SUM({sym_name})",
-                        node_list[0].ancestor(Routine).symbol_table)
+                        routine.symbol_table)
               
             checksum.preceding_comment = ""
             checksum_nodes.append(checksum)
@@ -214,3 +216,35 @@ class DebugChecksumTrans(RegionTrans):
         assign = Assignment.create(Reference(internal_line), Reference(line))
         parent.addchild(explanation_statement, position+1)
         parent.addchild(assign, position+1)
+
+    def check_for_umprintmgr(self, routine):
+        ''' Check for "use umPrintMgr, ONLY: umPrint, umMessage, and insert it if 
+            not present.
+        '''
+        
+        # Get the symbol table, and check the dict keys for the 
+        # module we want, in this case "umprintmgr". If it isn't 
+        # present, add it, then add the relevant subroutines
+        # that we want to import
+        # We could also use wildcard_import=True, but this isn't 
+        # good practice
+        table = routine.symbol_table
+        if 'umprintmgr' not in table.symbols_dict.keys():   
+            umprintmgr = table.new_symbol(root_name='umprintmgr',
+                                symbol_type=ContainerSymbol,
+                                wildcard_import=False
+                                )
+            ummessage = table.new_symbol(root_name='ummessage',
+                                symbol_type=DataSymbol,
+                                datatype=UnresolvedType(),
+                                )
+            umprint = table.new_symbol(root_name='umprint',
+                        symbol_type=DataSymbol,
+                        datatype=UnresolvedType(),
+                        )
+            
+            # set the Interface of these new Symbols to our umprintmgr
+            # symbol - this tells PSyclone that these are linked, and that 
+            # these are the routines that we import from that module
+            ummessage.interface = ImportInterface(umprintmgr)
+            umprint.interface = ImportInterface(umprintmgr)
